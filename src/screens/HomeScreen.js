@@ -62,7 +62,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={[layout.container, styles.homeContainer]}>
       <View style={styles.header}>
-        <Image source={require('../../assets/icon.png')} style={styles.logo} />
+        <Image source={require('../../assets/omega.png')} style={styles.logo} />
         <Text style={styles.title}>Medidor Inteligente</Text>
         <Text style={styles.subtitle}>
           Precisão e praticidade para suas medições ópticas.
