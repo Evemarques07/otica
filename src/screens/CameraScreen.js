@@ -1,12 +1,16 @@
-// src/screens/CameraScreen.js
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Button, Alert, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Button,
+  Alert,
+  TouchableOpacity,
+} from 'react-native';
 
-// MUDANÇA 1: Importações atualizadas para a nova API
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function CameraScreen({ navigation }) {
-  // MUDANÇA 2: Usando o hook useCameraPermissions em vez da função antiga
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
 
@@ -17,19 +21,16 @@ export default function CameraScreen({ navigation }) {
         console.log('LOG: Foto tirada com sucesso. URI:', data.uri);
         navigation.navigate('Adjust', { imageUri: data.uri });
       } catch (error) {
-        console.error("LOG: Erro ao tirar a foto:", error);
-        Alert.alert("Erro", "Não foi possível capturar a imagem.");
+        console.error('LOG: Erro ao tirar a foto:', error);
+        Alert.alert('Erro', 'Não foi possível capturar a imagem.');
       }
     }
   };
 
-  // MUDANÇA 3: Nova lógica para verificar as permissões
-  // Se as permissões ainda estão carregando
   if (!permission) {
     return <View />;
   }
 
-  // Se as permissões não foram concedidas
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
@@ -41,22 +42,16 @@ export default function CameraScreen({ navigation }) {
     );
   }
 
-  // Se as permissões foram concedidas, mostra a câmera
   return (
     <View style={styles.container}>
-      {/* MUDANÇA 4: O componente agora é <CameraView> e a prop é 'facing' */}
-      <CameraView 
-        style={styles.camera} 
-        facing="front"
-        ref={cameraRef} // MUDANÇA 5: A ref agora é para o CameraView
-      >
-        <View style={styles.buttonContainer}>
-          {/* Usando TouchableOpacity para um botão mais estilizado, como no exemplo */}
-          <TouchableOpacity style={styles.button} onPress={takePicture}>
-            <View style={styles.innerButton} />
-          </TouchableOpacity>
-        </View>
-      </CameraView>
+      {/* A CameraView agora não tem filhos */}
+      <CameraView style={styles.camera} facing="front" ref={cameraRef} />
+      {/* O buttonContainer é um irmão da CameraView e está posicionado de forma absoluta */}
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.button} onPress={takePicture}>
+          <View style={styles.innerButton} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -64,6 +59,9 @@ export default function CameraScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // IMPORTANTE: Adicione 'position: relative' ou defina flex: 1 no container pai
+    // para que o posicionamento absoluto do buttonContainer funcione corretamente em relação a ele.
+    position: 'relative',
   },
   camera: {
     flex: 1,
@@ -80,8 +78,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+    // IMPORTANTE: Adicione um zIndex para garantir que o botão esteja sempre acima da câmera
+    zIndex: 1,
   },
-  // Estilos para um botão de câmera mais bonito
   button: {
     width: 70,
     height: 70,

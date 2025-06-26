@@ -1,0 +1,15 @@
+# Arquivos de dependências
+node_modules
+
+# Arquivos de build/distribuição
+dist
+build
+coverage
+
+# Arquivos de lock
+package-lock.json
+yarn.lock
+
+# Outros
+.vscode
+.env

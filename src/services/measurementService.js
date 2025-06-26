@@ -10,13 +10,13 @@ let model;
 export const initializeTensorFlow = async () => {
   if (model) return;
 
-  console.log("Inicializando TensorFlow e carregando modelo...");
+  console.log('Inicializando TensorFlow e carregando modelo...');
   await tf.ready();
   model = await faceLandmarksDetection.load(
-  faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
-  { maxFaces: 1, runtime: 'tfjs' }
-);
-  console.log("Modelo carregado com sucesso!");
+    faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
+    { maxFaces: 1, runtime: 'tfjs' }
+  );
+  console.log('Modelo carregado com sucesso!');
 };
 
 const imageToTensor = async (imageUri) => {
@@ -30,7 +30,7 @@ const imageToTensor = async (imageUri) => {
   const buffer = new Uint8Array(width * height * 3);
   let offset = 0;
   for (let i = 0; i < data.length; i += 4) {
-    buffer[offset++] = data[i];     // R
+    buffer[offset++] = data[i]; // R
     buffer[offset++] = data[i + 1]; // G
     buffer[offset++] = data[i + 2]; // B
   }
@@ -46,7 +46,7 @@ export const processImage = async (imageUri, pixelsPerMm) => {
     const predictions = await model.estimateFaces({ input: imageTensor });
 
     if (!predictions || predictions.length === 0) {
-      throw new Error("Nenhum rosto detectado.");
+      throw new Error('Nenhum rosto detectado.');
     }
 
     const keypoints = predictions[0].keypoints;
@@ -54,7 +54,7 @@ export const processImage = async (imageUri, pixelsPerMm) => {
     const pRight = keypoints[468];
 
     if (!pLeft || !pRight) {
-      throw new Error("Não foi possível encontrar os pontos das pupilas.");
+      throw new Error('Não foi possível encontrar os pontos das pupilas.');
     }
 
     const pdInPixels = Math.sqrt(
@@ -69,9 +69,8 @@ export const processImage = async (imageUri, pixelsPerMm) => {
     return {
       pupillaryDistance: pupillaryDistance.toFixed(2),
     };
-
   } catch (error) {
-    console.error("Erro no processamento da imagem:", error);
+    console.error('Erro no processamento da imagem:', error);
     return { error: error.message };
   }
 };
