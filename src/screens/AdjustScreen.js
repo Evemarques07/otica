@@ -20,6 +20,9 @@ import Animated, {
   useAnimatedProps,
   useAnimatedStyle,
   withTiming,
+  runOnUI,
+  runOnJS,
+  useAnimatedReaction,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import DraggablePoint from '../components/DraggablePoint';
@@ -37,58 +40,62 @@ export default function AdjustScreen({ route, navigation }) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
-  // Usaremos estes para salvar o estado entre os gestos.
-  const savedScale = useSharedValue(1);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
-  const centerImageForZoom = (newScale) => {
-    'worklet';
-    savedScale.value = newScale;
-    scale.value = withTiming(newScale);
-
-    const newTranslateX = (screenWidth / 2) * (1 - newScale);
-    const newTranslateY = (screenHeight / 2) * (1 - newScale);
-
-    savedTranslateX.value = newTranslateX;
-    savedTranslateY.value = newTranslateY;
-    translateX.value = withTiming(newTranslateX);
-    translateY.value = withTiming(newTranslateY);
-  };
-
-  const handleZoomChange = (newZoom) => {
-    centerImageForZoom(newZoom);
-  };
-
-  // MUDANÇA FINAL: Lógica correta de gestos
-  const panGesture = Gesture.Pan()
-    .enabled(mode === 'pan')
-    .minPointers(2)
-    .maxPointers(2)
-    .onUpdate((event) => {
-      'worklet';
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
-    })
-    .onEnd(() => {
-      'worklet';
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    });
+  // **** MUDANÇA PRINCIPAL: LÓGICA DE GESTO COM PONTO FOCAL ****
+  // Contexto para armazenar o estado inicial do gesto
+  const pinchContext = useSharedValue({ x: 0, y: 0, scale: 1 });
 
   const pinchGesture = Gesture.Pinch()
     .enabled(mode === 'pan')
+    .onStart((event) => {
+      'worklet';
+      // Salva o estado atual no início do gesto
+      pinchContext.value = {
+        x: translateX.value,
+        y: translateY.value,
+        scale: scale.value,
+      };
+    })
     .onUpdate((event) => {
       'worklet';
-      const newScale = savedScale.value * event.scale;
+      // Calcula a nova escala
+      const newScale = pinchContext.value.scale * event.scale;
       scale.value = Math.max(0.5, Math.min(newScale, 5));
-    })
-    .onEnd(() => {
-      'worklet';
-      savedScale.value = scale.value;
+
+      // Calcula a correção da translação para manter o ponto focal
+      // A fórmula compensa o deslocamento causado pela mudança de escala
+      translateX.value =
+        event.focalX -
+        (event.focalX - pinchContext.value.x) *
+          (scale.value / pinchContext.value.scale);
+      translateY.value =
+        event.focalY -
+        (event.focalY - pinchContext.value.y) *
+          (scale.value / pinchContext.value.scale);
     });
 
-  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
+  // Gesto de Pan com 1 dedo (arrastar a imagem)
+  const panGesture = Gesture.Pan()
+    .enabled(mode === 'pan')
+    .minPointers(1)
+    .maxPointers(1)
+    .onStart(() => {
+      'worklet';
+      pinchContext.value = {
+        x: translateX.value,
+        y: translateY.value,
+        scale: scale.value,
+      };
+    })
+    .onUpdate((event) => {
+      'worklet';
+      translateX.value = pinchContext.value.x + event.translationX;
+      translateY.value = pinchContext.value.y + event.translationY;
+    });
+
+  // Usamos Gesture.Race para que o Pan com 1 dedo e o Pinch com 2 não entrem em conflito.
+  // O sistema dará prioridade ao Pinch quando 2 dedos estiverem na tela.
+  const composedGesture = Gesture.Race(pinchGesture, panGesture);
+  // **** FIM DA MUDANÇA ****
 
   const animatedImageStyle = useAnimatedStyle(() => ({
     transform: [
@@ -97,6 +104,17 @@ export default function AdjustScreen({ route, navigation }) {
       { scale: scale.value },
     ],
   }));
+
+  const centerImageForZoom = (newScale) => {
+    'worklet';
+    scale.value = withTiming(newScale);
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+  };
+
+  const handleZoomChange = (newZoom) => {
+    centerImageForZoom(newZoom);
+  };
 
   const pointAX = useSharedValue(screenWidth / 2 - 100);
   const pointAY = useSharedValue(screenHeight / 2);
@@ -115,9 +133,6 @@ export default function AdjustScreen({ route, navigation }) {
     scale.value = withTiming(1);
     translateX.value = withTiming(0);
     translateY.value = withTiming(0);
-    savedScale.value = 1;
-    savedTranslateX.value = 0;
-    savedTranslateY.value = 0;
   };
 
   const handleResetZoom = () => {
@@ -125,22 +140,30 @@ export default function AdjustScreen({ route, navigation }) {
   };
 
   const proceedToMeasurement = () => {
-    const pA = { x: pointAX.value, y: pointAY.value };
-    const pB = { x: pointBX.value, y: pointBY.value };
-    const distanceInPixels = Math.sqrt(
-      Math.pow(pB.x - pA.x, 2) + Math.pow(pB.y - pA.y, 2)
-    );
-    const pixelsPerMm = distanceInPixels / 85.6;
+    const navigateOnJS = (params) => {
+      if (!isFinite(params.pixelsPerMm) || params.pixelsPerMm <= 0) {
+        Alert.alert(
+          'Calibração falhou',
+          'Tente posicionar os pontos novamente nos cantos do cartão.'
+        );
+        return;
+      }
+      navigation.navigate('Measurement', {
+        imageUri: params.imageUri,
+        pixelsPerMm: params.pixelsPerMm,
+      });
+    };
 
-    if (!isFinite(pixelsPerMm) || pixelsPerMm <= 0) {
-      Alert.alert(
-        'Calibração falhou',
-        'Tente posicionar os pontos novamente nos cantos do cartão.'
+    runOnUI(() => {
+      'worklet';
+      const pA = { x: pointAX.value, y: pointAY.value };
+      const pB = { x: pointBX.value, y: pointBY.value };
+      const distanceInPixels = Math.sqrt(
+        Math.pow(pB.x - pA.x, 2) + Math.pow(pB.y - pA.y, 2)
       );
-      return;
-    }
-
-    navigation.navigate('Measurement', { imageUri, pixelsPerMm });
+      const pixelsPerMm = distanceInPixels / 85.6;
+      runOnJS(navigateOnJS)({ imageUri, pixelsPerMm });
+    })();
   };
 
   return (
@@ -158,7 +181,10 @@ export default function AdjustScreen({ route, navigation }) {
         </Animated.View>
       </GestureDetector>
 
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents={mode === 'points' ? 'box-none' : 'none'}
+      >
         <Svg height="100%" width="100%">
           <AnimatedLine
             animatedProps={animatedLineProps}

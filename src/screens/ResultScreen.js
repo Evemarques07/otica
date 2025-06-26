@@ -49,10 +49,10 @@ export default function ResultScreen({ route, navigation }) {
           DNP Total: {measurements.pupillaryDistance?.toFixed(2) ?? 'N/A'} mm
         </Text>
         <Text style={styles.resultText}>
-          DNP Esquerda: {measurements.pdLeft?.toFixed(2) ?? 'N/A'} mm
+          DP Esquerda: {measurements.pdLeft?.toFixed(2) ?? 'N/A'} mm
         </Text>
         <Text style={styles.resultText}>
-          DNP Direita: {measurements.pdRight?.toFixed(2) ?? 'N/A'} mm
+          DP Direita: {measurements.pdRight?.toFixed(2) ?? 'N/A'} mm
         </Text>
 
         <View style={styles.separator} />

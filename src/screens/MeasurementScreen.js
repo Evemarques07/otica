@@ -22,6 +22,8 @@ import Animated, {
   useDerivedValue,
   useAnimatedStyle,
   withTiming,
+  runOnUI,
+  runOnJS,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import DraggablePoint from '../components/DraggablePoint';
@@ -35,16 +37,12 @@ const calculateDistanceMm = (p1x, p1y, p2x, p2y, pixelsPerMm) => {
   const dist = Math.sqrt(Math.pow(p2x - p1x, 2) + Math.pow(p2y - p1y, 2));
   return (dist / pixelsPerMm).toFixed(2);
 };
-
-// Função específica para distância horizontal (PD Monocular)
 const calculateHorizontalDistanceMm = (x1, x2, pixelsPerMm) => {
   'worklet';
   if (!pixelsPerMm || pixelsPerMm <= 0 || !isFinite(pixelsPerMm)) return '0.00';
   const dist = Math.abs(x1 - x2);
   return (dist / pixelsPerMm).toFixed(2);
 };
-
-// Função específica para distância vertical (Altura Óptica)
 const calculateVerticalDistanceMm = (y1, y2, pixelsPerMm) => {
   'worklet';
   if (!pixelsPerMm || pixelsPerMm <= 0 || !isFinite(pixelsPerMm)) return '0.00';
@@ -68,50 +66,55 @@ export default function MeasurementScreen({ route, navigation }) {
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const savedScale = useSharedValue(1);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
 
-  const centerImageForZoom = (newScale) => {
-    'worklet';
-    savedScale.value = newScale;
-    scale.value = withTiming(newScale);
-    const newTranslateX = (screenWidth / 2) * (1 - newScale);
-    const newTranslateY = (screenHeight / 2) * (1 - newScale);
-    savedTranslateX.value = newTranslateX;
-    savedTranslateY.value = newTranslateY;
-    translateX.value = withTiming(newTranslateX);
-    translateY.value = withTiming(newTranslateY);
-  };
-  const handleZoomChange = (newZoom) => {
-    centerImageForZoom(newZoom);
-  };
-  const panGesture = Gesture.Pan()
-    .enabled(mode === 'pan')
-    .minPointers(2)
-    .maxPointers(2)
-    .onUpdate((event) => {
-      'worklet';
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
-    })
-    .onEnd(() => {
-      'worklet';
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    });
+  // **** MUDANÇA PRINCIPAL: LÓGICA DE GESTO COM PONTO FOCAL ****
+  const pinchContext = useSharedValue({ x: 0, y: 0, scale: 1 });
+
   const pinchGesture = Gesture.Pinch()
     .enabled(mode === 'pan')
+    .onStart(() => {
+      'worklet';
+      pinchContext.value = {
+        x: translateX.value,
+        y: translateY.value,
+        scale: scale.value,
+      };
+    })
     .onUpdate((event) => {
       'worklet';
-      const newScale = savedScale.value * event.scale;
+      const newScale = pinchContext.value.scale * event.scale;
       scale.value = Math.max(0.5, Math.min(newScale, 5));
-    })
-    .onEnd(() => {
-      'worklet';
-      savedScale.value = scale.value;
+      translateX.value =
+        event.focalX -
+        (event.focalX - pinchContext.value.x) *
+          (scale.value / pinchContext.value.scale);
+      translateY.value =
+        event.focalY -
+        (event.focalY - pinchContext.value.y) *
+          (scale.value / pinchContext.value.scale);
     });
-  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
+
+  const panGesture = Gesture.Pan()
+    .enabled(mode === 'pan')
+    .minPointers(1)
+    .maxPointers(1)
+    .onStart(() => {
+      'worklet';
+      pinchContext.value = {
+        x: translateX.value,
+        y: translateY.value,
+        scale: scale.value,
+      };
+    })
+    .onUpdate((event) => {
+      'worklet';
+      translateX.value = pinchContext.value.x + event.translationX;
+      translateY.value = pinchContext.value.y + event.translationY;
+    });
+
+  const composedGesture = Gesture.Race(pinchGesture, panGesture);
+  // **** FIM DA MUDANÇA ****
+
   const animatedImageStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
@@ -119,21 +122,26 @@ export default function MeasurementScreen({ route, navigation }) {
       { scale: scale.value },
     ],
   }));
+
+  const centerImageForZoom = (newScale) => {
+    'worklet';
+    scale.value = withTiming(newScale);
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+  };
+  const handleZoomChange = (newZoom) => {
+    centerImageForZoom(newZoom);
+  };
   const resetZoomWorklet = () => {
     'worklet';
     scale.value = withTiming(1);
     translateX.value = withTiming(0);
     translateY.value = withTiming(0);
-    savedScale.value = 1;
-    savedTranslateX.value = 0;
-    savedTranslateY.value = 0;
   };
   const handleResetZoom = () => {
     resetZoomWorklet();
   };
 
-  // --- PONTOS DE MEDIÇÃO ---
-  // Pontos existentes
   const pupilLX = useSharedValue(screenWidth / 2 - 50),
     pupilLY = useSharedValue(screenHeight / 2 - 30);
   const pupilRX = useSharedValue(screenWidth / 2 + 50),
@@ -142,19 +150,13 @@ export default function MeasurementScreen({ route, navigation }) {
     frameLY = useSharedValue(screenHeight / 2);
   const frameRX = useSharedValue(screenWidth / 2 + 120),
     frameRY = useSharedValue(screenHeight / 2);
-
-  // NOVOS PONTOS
-  // Ponto para o centro da ponte nasal (referência para PD monocular)
   const nasalCenterX = useSharedValue(screenWidth / 2),
     nasalCenterY = useSharedValue(screenHeight / 2 + 20);
-  // Pontos para a base da armação (referência para Altura Óptica)
   const frameBaseLX = useSharedValue(screenWidth / 2 - 70),
     frameBaseLY = useSharedValue(screenHeight / 2 + 50);
   const frameBaseRX = useSharedValue(screenWidth / 2 + 70),
     frameBaseRY = useSharedValue(screenHeight / 2 + 50);
 
-  // --- CÁLCULOS DERIVADOS ---
-  // Medidas existentes
   const dnpText = useDerivedValue(
     () =>
       `DNP Total: ${calculateDistanceMm(pupilLX.value, pupilLY.value, pupilRX.value, pupilRY.value, pixelsPerMm)} mm`
@@ -163,15 +165,13 @@ export default function MeasurementScreen({ route, navigation }) {
     () =>
       `Largura Armação: ${calculateDistanceMm(frameLX.value, frameLY.value, frameRX.value, frameRY.value, pixelsPerMm)} mm`
   );
-
-  // NOVAS MEDIDAS
   const pdLeftText = useDerivedValue(
     () =>
-      `DNP Esquerda: ${calculateHorizontalDistanceMm(pupilLX.value, nasalCenterX.value, pixelsPerMm)} mm`
+      `DP Esquerda: ${calculateHorizontalDistanceMm(pupilLX.value, nasalCenterX.value, pixelsPerMm)} mm`
   );
   const pdRightText = useDerivedValue(
     () =>
-      `DNP Direita: ${calculateHorizontalDistanceMm(pupilRX.value, nasalCenterX.value, pixelsPerMm)} mm`
+      `DP Direita: ${calculateHorizontalDistanceMm(pupilRX.value, nasalCenterX.value, pixelsPerMm)} mm`
   );
   const opticalCenterLeftText = useDerivedValue(
     () =>
@@ -182,7 +182,6 @@ export default function MeasurementScreen({ route, navigation }) {
       `Altura Óptica D: ${calculateVerticalDistanceMm(pupilRY.value, frameBaseRY.value, pixelsPerMm)} mm`
   );
 
-  // --- PROPS PARA COMPONENTES ANIMADOS ---
   const dnpAnimatedProps = useAnimatedProps(() => ({ text: dnpText.value }));
   const frameWidthAnimatedProps = useAnimatedProps(() => ({
     text: frameWidthText.value,
@@ -200,7 +199,6 @@ export default function MeasurementScreen({ route, navigation }) {
     text: opticalCenterRightText.value,
   }));
 
-  // --- PROPS PARA LINHAS DE GUIA ---
   const createLineProps = (p1x, p1y, p2x, p2y) =>
     useAnimatedProps(() => ({
       x1: p1x.value * scale.value + translateX.value,
@@ -216,15 +214,12 @@ export default function MeasurementScreen({ route, navigation }) {
     frameBaseRX,
     frameBaseRY
   );
-
-  // Linha vertical para o centro nasal
   const linePropsNasalCenter = useAnimatedProps(() => ({
     x1: nasalCenterX.value * scale.value + translateX.value,
     y1: 0,
     x2: nasalCenterX.value * scale.value + translateX.value,
     y2: screenHeight,
   }));
-  // Linhas verticais para a altura óptica
   const linePropsOpticalCenterL = createLineProps(
     pupilLX,
     pupilLY,
@@ -239,56 +234,64 @@ export default function MeasurementScreen({ route, navigation }) {
   );
 
   const proceedToResults = () => {
-    const measurements = {
-      pupillaryDistance: parseFloat(
-        calculateDistanceMm(
-          pupilLX.value,
-          pupilLY.value,
-          pupilRX.value,
-          pupilRY.value,
-          pixelsPerMm
-        )
-      ),
-      frameWidth: parseFloat(
-        calculateDistanceMm(
-          frameLX.value,
-          frameLY.value,
-          frameRX.value,
-          frameRY.value,
-          pixelsPerMm
-        )
-      ),
-      // Novas medidas
-      pdLeft: parseFloat(
-        calculateHorizontalDistanceMm(
-          pupilLX.value,
-          nasalCenterX.value,
-          pixelsPerMm
-        )
-      ),
-      pdRight: parseFloat(
-        calculateHorizontalDistanceMm(
-          pupilRX.value,
-          nasalCenterX.value,
-          pixelsPerMm
-        )
-      ),
-      opticalCenterLeft: parseFloat(
-        calculateVerticalDistanceMm(
-          pupilLY.value,
-          frameBaseLY.value,
-          pixelsPerMm
-        )
-      ),
-      opticalCenterRight: parseFloat(
-        calculateVerticalDistanceMm(
-          pupilRY.value,
-          frameBaseRY.value,
-          pixelsPerMm
-        )
-      ),
+    const navigateOnJS = (params) => {
+      navigation.navigate('Result', {
+        imageUri: params.imageUri,
+        measurements: params.measurements,
+      });
     };
-    navigation.navigate('Result', { imageUri, measurements });
+    runOnUI(() => {
+      'worklet';
+      const measurements = {
+        pupillaryDistance: parseFloat(
+          calculateDistanceMm(
+            pupilLX.value,
+            pupilLY.value,
+            pupilRX.value,
+            pupilRY.value,
+            pixelsPerMm
+          )
+        ),
+        frameWidth: parseFloat(
+          calculateDistanceMm(
+            frameLX.value,
+            frameLY.value,
+            frameRX.value,
+            frameRY.value,
+            pixelsPerMm
+          )
+        ),
+        pdLeft: parseFloat(
+          calculateHorizontalDistanceMm(
+            pupilLX.value,
+            nasalCenterX.value,
+            pixelsPerMm
+          )
+        ),
+        pdRight: parseFloat(
+          calculateHorizontalDistanceMm(
+            pupilRX.value,
+            nasalCenterX.value,
+            pixelsPerMm
+          )
+        ),
+        opticalCenterLeft: parseFloat(
+          calculateVerticalDistanceMm(
+            pupilLY.value,
+            frameBaseLY.value,
+            pixelsPerMm
+          )
+        ),
+        opticalCenterRight: parseFloat(
+          calculateVerticalDistanceMm(
+            pupilRY.value,
+            frameBaseRY.value,
+            pixelsPerMm
+          )
+        ),
+      };
+      runOnJS(navigateOnJS)({ imageUri, measurements });
+    })();
   };
 
   return (
@@ -304,9 +307,11 @@ export default function MeasurementScreen({ route, navigation }) {
         </Animated.View>
       </GestureDetector>
 
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents={mode === 'points' ? 'box-none' : 'none'}
+      >
         <Svg height="100%" width="100%">
-          {/* Linhas de Medição */}
           <AnimatedLine
             animatedProps={linePropsDNP}
             stroke="cyan"
@@ -322,8 +327,6 @@ export default function MeasurementScreen({ route, navigation }) {
             stroke="magenta"
             strokeWidth={2}
           />
-
-          {/* Linhas de Guia */}
           <AnimatedLine
             animatedProps={linePropsNasalCenter}
             stroke="white"
@@ -343,8 +346,6 @@ export default function MeasurementScreen({ route, navigation }) {
             strokeDasharray="5, 5"
           />
         </Svg>
-
-        {/* Pontos de DNP */}
         <DraggablePoint
           x={pupilLX}
           y={pupilLY}
@@ -363,8 +364,6 @@ export default function MeasurementScreen({ route, navigation }) {
           imageTranslateY={translateY}
           enabled={mode === 'points'}
         />
-
-        {/* Pontos de Largura */}
         <DraggablePoint
           x={frameLX}
           y={frameLY}
@@ -383,8 +382,6 @@ export default function MeasurementScreen({ route, navigation }) {
           imageTranslateY={translateY}
           enabled={mode === 'points'}
         />
-
-        {/* Novos Pontos */}
         <DraggablePoint
           x={nasalCenterX}
           y={nasalCenterY}
@@ -415,7 +412,6 @@ export default function MeasurementScreen({ route, navigation }) {
       </View>
 
       <View style={styles.controls}>
-        {/* ... (Controles de modo e zoom permanecem os mesmos) ... */}
         <View style={styles.modeSelector}>
           <TouchableOpacity
             style={[
@@ -460,7 +456,6 @@ export default function MeasurementScreen({ route, navigation }) {
         )}
 
         <View style={styles.resultsBox}>
-          {/* DNP Total */}
           <View style={styles.resultItem}>
             <View
               style={[styles.colorIndicator, { backgroundColor: 'cyan' }]}
@@ -472,7 +467,6 @@ export default function MeasurementScreen({ route, navigation }) {
               style={styles.resultText}
             />
           </View>
-          {/* Largura da Armação */}
           <View style={styles.resultItem}>
             <View style={[styles.colorIndicator, { backgroundColor: 'red' }]} />
             <AnimatedTextInput
@@ -482,7 +476,6 @@ export default function MeasurementScreen({ route, navigation }) {
               style={styles.resultText}
             />
           </View>
-          {/* DNP Monocular */}
           <View style={styles.resultItem}>
             <View
               style={[styles.colorIndicator, { backgroundColor: 'orange' }]}
@@ -505,7 +498,6 @@ export default function MeasurementScreen({ route, navigation }) {
               style={styles.resultText}
             />
           </View>
-          {/* Altura Óptica */}
           <View style={styles.resultItem}>
             <View
               style={[styles.colorIndicator, { backgroundColor: 'magenta' }]}
@@ -582,7 +574,7 @@ const styles = StyleSheet.create({
   },
   resultItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
   colorIndicator: { width: 15, height: 15, borderRadius: 3, marginRight: 10 },
-  resultText: { color: 'white', fontSize: 14, padding: 0 }, // Diminuí um pouco a fonte
+  resultText: { color: 'white', fontSize: 14, padding: 0 },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-around',
