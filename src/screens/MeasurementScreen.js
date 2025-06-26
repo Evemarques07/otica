@@ -1,4 +1,3 @@
-// src/screens/MeasurementScreen.js
 import React, { useState } from 'react';
 import {
   View,
@@ -6,9 +5,7 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  Button,
   Dimensions,
-  Alert,
 } from 'react-native';
 import {
   Gesture,
@@ -27,10 +24,19 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import DraggablePoint from '../components/DraggablePoint';
+import {
+  colors,
+  layout,
+  typography,
+  components,
+  spacing,
+} from '../styles/theme';
+import CustomModal from '../components/CustomModal';
+import { MaterialIcons } from '@expo/vector-icons';
 
+// --- LÓGICA DE CÁLCULO (INTACTA) ---
 const AnimatedLine = Animated.createAnimatedComponent(Line);
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
-
 const calculateDistanceMm = (p1x, p1y, p2x, p2y, pixelsPerMm) => {
   'worklet';
   if (!pixelsPerMm || pixelsPerMm <= 0 || !isFinite(pixelsPerMm)) return '0.00';
@@ -49,25 +55,54 @@ const calculateVerticalDistanceMm = (y1, y2, pixelsPerMm) => {
   const dist = Math.abs(y1 - y2);
   return (dist / pixelsPerMm).toFixed(2);
 };
-
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function MeasurementScreen({ route, navigation }) {
-  const { imageUri, pixelsPerMm } = route.params;
+  const { imageUri, pixelsPerMm, originalImageWidth, originalImageHeight } =
+    route.params;
   const [mode, setMode] = useState('points');
+  const [modalInfo, setModalInfo] = useState({
+    isVisible: false,
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  const hideModal = () => setModalInfo({ ...modalInfo, isVisible: false });
 
   if (!isFinite(pixelsPerMm) || pixelsPerMm <= 0) {
-    Alert.alert('Erro de Calibração', 'O fator de calibração é inválido.', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
-    return null;
+    React.useEffect(() => {
+      setModalInfo({
+        isVisible: true,
+        title: 'Erro de Calibração',
+        message:
+          'O fator de calibração é inválido. Por favor, volte e refaça a calibração.',
+        buttons: [
+          {
+            text: 'Voltar',
+            onPress: () => navigation.goBack(),
+            style: 'primary',
+          },
+        ],
+      });
+    }, [navigation]);
+    return (
+      <View style={styles.container}>
+        <CustomModal
+          isVisible={modalInfo.isVisible}
+          title={modalInfo.title}
+          message={modalInfo.message}
+          buttons={modalInfo.buttons}
+          onClose={hideModal}
+        />
+      </View>
+    );
   }
 
+  // --- LÓGICA REANIMATED (INTACTA) ---
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-
-  // **** MUDANÇA PRINCIPAL: LÓGICA DE GESTO COM PONTO FOCAL ****
   const pinchContext = useSharedValue({ x: 0, y: 0, scale: 1 });
 
   const pinchGesture = Gesture.Pinch()
@@ -93,7 +128,6 @@ export default function MeasurementScreen({ route, navigation }) {
         (event.focalY - pinchContext.value.y) *
           (scale.value / pinchContext.value.scale);
     });
-
   const panGesture = Gesture.Pan()
     .enabled(mode === 'pan')
     .minPointers(1)
@@ -111,9 +145,7 @@ export default function MeasurementScreen({ route, navigation }) {
       translateX.value = pinchContext.value.x + event.translationX;
       translateY.value = pinchContext.value.y + event.translationY;
     });
-
   const composedGesture = Gesture.Race(pinchGesture, panGesture);
-  // **** FIM DA MUDANÇA ****
 
   const animatedImageStyle = useAnimatedStyle(() => ({
     transform: [
@@ -122,24 +154,11 @@ export default function MeasurementScreen({ route, navigation }) {
       { scale: scale.value },
     ],
   }));
-
-  const centerImageForZoom = (newScale) => {
-    'worklet';
-    scale.value = withTiming(newScale);
-    translateX.value = withTiming(0);
-    translateY.value = withTiming(0);
-  };
-  const handleZoomChange = (newZoom) => {
-    centerImageForZoom(newZoom);
-  };
-  const resetZoomWorklet = () => {
+  const handleResetZoom = () => {
     'worklet';
     scale.value = withTiming(1);
     translateX.value = withTiming(0);
     translateY.value = withTiming(0);
-  };
-  const handleResetZoom = () => {
-    resetZoomWorklet();
   };
 
   const pupilLX = useSharedValue(screenWidth / 2 - 50),
@@ -232,14 +251,10 @@ export default function MeasurementScreen({ route, navigation }) {
     pupilRX,
     frameBaseRY
   );
+  // --- FIM DA LÓGICA REANIMATED ---
 
   const proceedToResults = () => {
-    const navigateOnJS = (params) => {
-      navigation.navigate('Result', {
-        imageUri: params.imageUri,
-        measurements: params.measurements,
-      });
-    };
+    const navigateOnJS = (params) => navigation.navigate('Result', params);
     runOnUI(() => {
       'worklet';
       const measurements = {
@@ -290,7 +305,12 @@ export default function MeasurementScreen({ route, navigation }) {
           )
         ),
       };
-      runOnJS(navigateOnJS)({ imageUri, measurements });
+      runOnJS(navigateOnJS)({
+        imageUri,
+        measurements,
+        originalImageWidth,
+        originalImageHeight,
+      });
     })();
   };
 
@@ -314,34 +334,34 @@ export default function MeasurementScreen({ route, navigation }) {
         <Svg height="100%" width="100%">
           <AnimatedLine
             animatedProps={linePropsDNP}
-            stroke="cyan"
+            stroke={colors.measurementLine1}
             strokeWidth={2}
           />
           <AnimatedLine
             animatedProps={linePropsFrame}
-            stroke="red"
+            stroke={colors.measurementLine2}
             strokeWidth={2}
           />
           <AnimatedLine
             animatedProps={linePropsFrameBase}
-            stroke="magenta"
+            stroke={colors.measurementLine3}
             strokeWidth={2}
           />
           <AnimatedLine
             animatedProps={linePropsNasalCenter}
-            stroke="white"
+            stroke={colors.surface}
             strokeWidth={1}
             strokeDasharray="5, 5"
           />
           <AnimatedLine
             animatedProps={linePropsOpticalCenterL}
-            stroke="magenta"
+            stroke={colors.measurementLine3}
             strokeWidth={1}
             strokeDasharray="5, 5"
           />
           <AnimatedLine
             animatedProps={linePropsOpticalCenterR}
-            stroke="magenta"
+            stroke={colors.measurementLine3}
             strokeWidth={1}
             strokeDasharray="5, 5"
           />
@@ -349,7 +369,7 @@ export default function MeasurementScreen({ route, navigation }) {
         <DraggablePoint
           x={pupilLX}
           y={pupilLY}
-          color="cyan"
+          color={colors.measurementLine1}
           imageScale={scale}
           imageTranslateX={translateX}
           imageTranslateY={translateY}
@@ -358,7 +378,7 @@ export default function MeasurementScreen({ route, navigation }) {
         <DraggablePoint
           x={pupilRX}
           y={pupilRY}
-          color="cyan"
+          color={colors.measurementLine1}
           imageScale={scale}
           imageTranslateX={translateX}
           imageTranslateY={translateY}
@@ -367,7 +387,7 @@ export default function MeasurementScreen({ route, navigation }) {
         <DraggablePoint
           x={frameLX}
           y={frameLY}
-          color="red"
+          color={colors.measurementLine2}
           imageScale={scale}
           imageTranslateX={translateX}
           imageTranslateY={translateY}
@@ -376,7 +396,7 @@ export default function MeasurementScreen({ route, navigation }) {
         <DraggablePoint
           x={frameRX}
           y={frameRY}
-          color="red"
+          color={colors.measurementLine2}
           imageScale={scale}
           imageTranslateX={translateX}
           imageTranslateY={translateY}
@@ -394,7 +414,7 @@ export default function MeasurementScreen({ route, navigation }) {
         <DraggablePoint
           x={frameBaseLX}
           y={frameBaseLY}
-          color="magenta"
+          color={colors.measurementLine3}
           imageScale={scale}
           imageTranslateX={translateX}
           imageTranslateY={translateY}
@@ -403,7 +423,7 @@ export default function MeasurementScreen({ route, navigation }) {
         <DraggablePoint
           x={frameBaseRX}
           y={frameBaseRY}
-          color="magenta"
+          color={colors.measurementLine3}
           imageScale={scale}
           imageTranslateX={translateX}
           imageTranslateY={translateY}
@@ -411,7 +431,7 @@ export default function MeasurementScreen({ route, navigation }) {
         />
       </View>
 
-      <View style={styles.controls}>
+      <View style={styles.controlsContainer}>
         <View style={styles.modeSelector}>
           <TouchableOpacity
             style={[
@@ -420,7 +440,8 @@ export default function MeasurementScreen({ route, navigation }) {
             ]}
             onPress={() => setMode('pan')}
           >
-            <Text style={styles.modeButtonText}>Zoom / Mover</Text>
+            <MaterialIcons name="pan-tool" size={20} color={colors.surface} />
+            <Text style={styles.modeButtonText}>Zoom/Mover</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -429,36 +450,22 @@ export default function MeasurementScreen({ route, navigation }) {
             ]}
             onPress={() => setMode('points')}
           >
+            <MaterialIcons
+              name="control-point"
+              size={20}
+              color={colors.surface}
+            />
             <Text style={styles.modeButtonText}>Ajustar Pontos</Text>
           </TouchableOpacity>
         </View>
-        {mode === 'pan' && (
-          <View style={styles.zoomButtons}>
-            <TouchableOpacity
-              style={styles.zoomButton}
-              onPress={() => handleZoomChange(1)}
-            >
-              <Text style={styles.zoomButtonText}>Zoom 1x</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.zoomButton}
-              onPress={() => handleZoomChange(2)}
-            >
-              <Text style={styles.zoomButtonText}>Zoom 2x</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.zoomButton}
-              onPress={() => handleZoomChange(4)}
-            >
-              <Text style={styles.zoomButtonText}>Zoom 4x</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         <View style={styles.resultsBox}>
           <View style={styles.resultItem}>
             <View
-              style={[styles.colorIndicator, { backgroundColor: 'cyan' }]}
+              style={[
+                styles.colorIndicator,
+                { backgroundColor: colors.measurementLine1 },
+              ]}
             />
             <AnimatedTextInput
               editable={false}
@@ -468,7 +475,12 @@ export default function MeasurementScreen({ route, navigation }) {
             />
           </View>
           <View style={styles.resultItem}>
-            <View style={[styles.colorIndicator, { backgroundColor: 'red' }]} />
+            <View
+              style={[
+                styles.colorIndicator,
+                { backgroundColor: colors.measurementLine2 },
+              ]}
+            />
             <AnimatedTextInput
               editable={false}
               value={frameWidthText.value}
@@ -500,7 +512,10 @@ export default function MeasurementScreen({ route, navigation }) {
           </View>
           <View style={styles.resultItem}>
             <View
-              style={[styles.colorIndicator, { backgroundColor: 'magenta' }]}
+              style={[
+                styles.colorIndicator,
+                { backgroundColor: colors.measurementLine3 },
+              ]}
             />
             <AnimatedTextInput
               editable={false}
@@ -511,7 +526,10 @@ export default function MeasurementScreen({ route, navigation }) {
           </View>
           <View style={styles.resultItem}>
             <View
-              style={[styles.colorIndicator, { backgroundColor: 'magenta' }]}
+              style={[
+                styles.colorIndicator,
+                { backgroundColor: colors.measurementLine3 },
+              ]}
             />
             <AnimatedTextInput
               editable={false}
@@ -523,61 +541,81 @@ export default function MeasurementScreen({ route, navigation }) {
         </View>
 
         <View style={styles.actionButtons}>
-          <Button title="Resetar Zoom" onPress={handleResetZoom} />
-          <Button title="Ver Resultados" onPress={proceedToResults} />
+          <TouchableOpacity
+            style={[components.buttonSecondary, { flex: 1 }]}
+            onPress={handleResetZoom}
+          >
+            <Text style={components.buttonSecondaryText}>Resetar Zoom</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[components.buttonPrimary, { flex: 1 }]}
+            onPress={proceedToResults}
+          >
+            <Text style={components.buttonPrimaryText}>Ver Resultados</Text>
+          </TouchableOpacity>
         </View>
       </View>
+      <CustomModal
+        isVisible={modalInfo.isVisible}
+        title={modalInfo.title}
+        message={modalInfo.message}
+        buttons={modalInfo.buttons}
+        onClose={hideModal}
+      />
     </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'black' },
+  container: { flex: 1, backgroundColor: colors.black },
   image: { flex: 1, width: '100%', height: '100%' },
-  controls: {
+  controlsContainer: {
     position: 'absolute',
-    bottom: 20,
-    left: '5%',
-    width: '90%',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.blackOverlay,
+    paddingTop: spacing.m,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.m,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   modeSelector: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(40, 40, 40, 0.8)',
-    borderRadius: 20,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#555',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: layout.borderRadius,
+    marginBottom: spacing.m,
     overflow: 'hidden',
   },
-  modeButton: { paddingVertical: 10, paddingHorizontal: 15 },
-  activeModeButton: { backgroundColor: '#007AFF' },
-  modeButtonText: { color: 'white', fontWeight: 'bold' },
-  zoomButtons: {
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 10,
-    backgroundColor: 'rgba(40, 40, 40, 0.8)',
-    borderRadius: 10,
-    paddingVertical: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.s,
   },
-  zoomButton: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 5 },
-  zoomButtonText: { color: 'white', fontWeight: 'bold' },
+  activeModeButton: { backgroundColor: colors.primary },
+  modeButtonText: { color: colors.surface, fontWeight: '600', fontSize: 16 },
   resultsBox: {
     width: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    padding: spacing.m,
+    borderRadius: layout.borderRadius,
+    marginBottom: spacing.m,
   },
-  resultItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
-  colorIndicator: { width: 15, height: 15, borderRadius: 3, marginRight: 10 },
-  resultText: { color: 'white', fontSize: 14, padding: 0 },
+  resultItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 3 },
+  colorIndicator: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+    marginRight: spacing.s,
+  },
+  resultText: { color: colors.surface, fontSize: 15, padding: 0 },
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
+    justifyContent: 'space-between',
+    gap: spacing.m,
   },
 });

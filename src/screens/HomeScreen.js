@@ -1,76 +1,142 @@
-import React from 'react';
-import { View, Text, Button, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  colors,
+  layout,
+  typography,
+  components,
+  spacing,
+} from '../styles/theme';
+import CustomModal from '../components/CustomModal';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen({ navigation }) {
+  const [modalInfo, setModalInfo] = useState({
+    isVisible: false,
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  const showModal = (title, message, buttons) => {
+    setModalInfo({ isVisible: true, title, message, buttons });
+  };
+
+  const hideModal = () => {
+    setModalInfo({ ...modalInfo, isVisible: false });
+  };
+
   const pickImage = async () => {
     try {
-      // LOG: Verificando status da permissão atual
-      console.log('LOG: Solicitando permissão da galeria...');
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      // LOG: Exibindo o status retornado
-      console.log(`LOG: Status da permissão da galeria: ${status}`);
-
       if (status !== 'granted') {
-        Alert.alert(
-          'Permissão necessária',
-          'Precisamos de acesso à sua galeria para continuar.'
+        showModal(
+          'Permissão Necessária',
+          'Precisamos de acesso à sua galeria de fotos para que você possa selecionar uma imagem.',
+          [{ text: 'OK', onPress: hideModal, style: 'primary' }]
         );
         return;
       }
 
-      // LOG: Se a permissão foi concedida, tentamos abrir a galeria
-      console.log('LOG: Permissão concedida. Abrindo a galeria...');
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images',
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 1,
       });
 
-      // LOG: Exibindo o resultado da galeria (se o usuário cancelou ou escolheu uma imagem)
-      console.log(
-        'LOG: Resultado da galeria:',
-        JSON.stringify(result, null, 2)
-      );
-
       if (!result.canceled) {
-        console.log(
-          'LOG: Imagem selecionada. Navegando para a tela de ajuste...'
-        );
         navigation.navigate('Adjust', { imageUri: result.assets[0].uri });
-      } else {
-        console.log('LOG: Usuário cancelou a seleção da galeria.');
       }
     } catch (error) {
-      // LOG: Capturando qualquer erro inesperado
-      console.error('LOG: Erro ao tentar abrir a galeria:', error);
-      Alert.alert('Erro', 'Não foi possível abrir a galeria de imagens.');
+      console.error('Erro ao abrir a galeria:', error);
+      showModal(
+        'Ops, ocorreu um erro',
+        'Não foi possível abrir a galeria de imagens. Por favor, tente novamente.',
+        [{ text: 'OK', onPress: hideModal, style: 'primary' }]
+      );
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Medidor</Text>
-      <View style={styles.buttonContainer}>
-        <Button
-          title="Tirar Foto"
+    <View style={[layout.container, styles.homeContainer]}>
+      <View style={styles.header}>
+        <Image source={require('../../assets/icon.png')} style={styles.logo} />
+        <Text style={styles.title}>Medidor Inteligente</Text>
+        <Text style={styles.subtitle}>
+          Precisão e praticidade para suas medições ópticas.
+        </Text>
+      </View>
+
+      <View style={styles.buttonWrapper}>
+        <TouchableOpacity
+          style={components.buttonPrimary}
           onPress={() => navigation.navigate('Camera')}
-        />
+        >
+          <View style={styles.buttonContent}>
+            <Ionicons name="camera-outline" size={22} color={colors.surface} />
+            <Text style={components.buttonPrimaryText}>Tirar Foto</Text>
+          </View>
+        </TouchableOpacity>
       </View>
-      <View style={styles.buttonContainer}>
-        <Button title="Escolher da Galeria" onPress={pickImage} />
+
+      <View style={styles.buttonWrapper}>
+        <TouchableOpacity
+          style={components.buttonSecondary}
+          onPress={pickImage}
+        >
+          <View style={styles.buttonContent}>
+            <Ionicons name="image-outline" size={22} color={colors.primary} />
+            <Text style={components.buttonSecondaryText}>
+              Escolher da Galeria
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
+
+      <CustomModal
+        isVisible={modalInfo.isVisible}
+        title={modalInfo.title}
+        message={modalInfo.message}
+        buttons={modalInfo.buttons}
+        onClose={hideModal}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 30 },
-  buttonContainer: {
-    width: '80%',
-    marginVertical: 10,
+  homeContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: spacing.xxl,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: spacing.l,
+  },
+  title: {
+    ...typography.h2,
+    textAlign: 'center',
+    marginBottom: spacing.s,
+  },
+  subtitle: {
+    ...typography.subheadline,
+    textAlign: 'center',
+    maxWidth: '90%',
+  },
+  buttonWrapper: {
+    width: '100%',
+    marginVertical: spacing.s,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s,
   },
 });

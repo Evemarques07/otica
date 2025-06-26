@@ -1,169 +1,175 @@
-// src/screens/ResultScreen.js
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
-  ActivityIndicator,
-  Button,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
+import {
+  colors,
+  layout,
+  typography,
+  components,
+  spacing,
+} from '../styles/theme';
 
 export default function ResultScreen({ route, navigation }) {
   const { imageUri, measurements } = route.params;
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500); // Carregamento mais rápido
-    return () => clearTimeout(timer);
-  }, []);
-
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <>
-          <Text style={styles.infoText}>Calculando suas medidas...</Text>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </>
-      );
-    }
-
-    if (!measurements) {
-      return (
-        <View style={styles.contentContainer}>
-          <Text style={styles.errorText}>Erro: Medidas não disponíveis.</Text>
-          <Button
-            title="Voltar para Medição"
-            onPress={() => navigation.goBack()}
-          />
-        </View>
-      );
-    }
-
+  if (!measurements) {
     return (
-      <View style={styles.resultsContainer}>
-        <Text style={styles.resultTitle}>Suas Medidas</Text>
-
-        <Text style={styles.resultCategory}>Distância Pupilar</Text>
-        <Text style={styles.resultText}>
-          DNP Total: {measurements.pupillaryDistance?.toFixed(2) ?? 'N/A'} mm
-        </Text>
-        <Text style={styles.resultText}>
-          DP Esquerda: {measurements.pdLeft?.toFixed(2) ?? 'N/A'} mm
-        </Text>
-        <Text style={styles.resultText}>
-          DP Direita: {measurements.pdRight?.toFixed(2) ?? 'N/A'} mm
-        </Text>
-
-        <View style={styles.separator} />
-
-        <Text style={styles.resultCategory}>Altura do Centro Óptico</Text>
-        <Text style={styles.resultText}>
-          Altura Esquerda: {measurements.opticalCenterLeft?.toFixed(2) ?? 'N/A'}{' '}
-          mm
-        </Text>
-        <Text style={styles.resultText}>
-          Altura Direita: {measurements.opticalCenterRight?.toFixed(2) ?? 'N/A'}{' '}
-          mm
-        </Text>
-
-        <View style={styles.separator} />
-
-        <Text style={styles.resultCategory}>Medidas da Armação</Text>
-        <Text style={styles.resultText}>
-          Largura Total: {measurements.frameWidth?.toFixed(2) ?? 'N/A'} mm
-        </Text>
-
-        <View style={{ marginTop: 20 }}>
-          <Button
-            title="Fazer Nova Medição"
-            onPress={() => navigation.navigate('Home')}
-          />
-        </View>
+      <View style={[layout.container, layout.centered]}>
+        <Text style={styles.errorText}>Erro: Medidas não disponíveis.</Text>
+        <TouchableOpacity
+          style={[components.buttonPrimary, { width: '80%' }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={components.buttonPrimaryText}>Tentar Novamente</Text>
+        </TouchableOpacity>
       </View>
     );
-  };
+  }
+
+  const MeasurementGroup = ({ title, data }) => (
+    <View style={styles.groupContainer}>
+      <Text style={styles.resultCategory}>{title}</Text>
+      {data.map((item, index) => (
+        <View key={index} style={styles.resultRow}>
+          <Text style={styles.resultLabel}>{item.label}</Text>
+          <Text style={styles.resultValue}>{item.value}</Text>
+        </View>
+      ))}
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+    >
       <Text style={styles.title}>Resultados da Análise</Text>
+
       <Image source={{ uri: imageUri }} style={styles.image} />
-      <View style={styles.contentContainer}>{renderContent()}</View>
-    </View>
+
+      <View style={styles.resultsCard}>
+        <MeasurementGroup
+          title="Distância Pupilar (DP)"
+          data={[
+            {
+              label: 'DNP Total',
+              value: `${measurements.pupillaryDistance?.toFixed(2) ?? 'N/A'} mm`,
+            },
+            {
+              label: 'DP Esquerda',
+              value: `${measurements.pdLeft?.toFixed(2) ?? 'N/A'} mm`,
+            },
+            {
+              label: 'DP Direita',
+              value: `${measurements.pdRight?.toFixed(2) ?? 'N/A'} mm`,
+            },
+          ]}
+        />
+        <MeasurementGroup
+          title="Altura do Centro Óptico"
+          data={[
+            {
+              label: 'Altura Esquerda',
+              value: `${measurements.opticalCenterLeft?.toFixed(2) ?? 'N/A'} mm`,
+            },
+            {
+              label: 'Altura Direita',
+              value: `${measurements.opticalCenterRight?.toFixed(2) ?? 'N/A'} mm`,
+            },
+          ]}
+        />
+        <MeasurementGroup
+          title="Medidas da Armação"
+          data={[
+            {
+              label: 'Largura Total',
+              value: `${measurements.frameWidth?.toFixed(2) ?? 'N/A'} mm`,
+            },
+          ]}
+        />
+      </View>
+
+      <TouchableOpacity
+        style={[components.buttonPrimary, styles.finalButton]}
+        onPress={() => navigation.popToTop()} // Volta para a primeira tela (Home)
+      >
+        <Text style={components.buttonPrimaryText}>Fazer Nova Medição</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.background,
   },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, color: '#333' },
+  scrollContent: {
+    padding: spacing.l,
+    paddingBottom: spacing.xxl,
+  },
+  title: {
+    ...typography.h2,
+    textAlign: 'center',
+    marginBottom: spacing.l,
+  },
   image: {
     width: '100%',
     height: 250,
     resizeMode: 'contain',
-    borderRadius: 10,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    borderRadius: layout.borderRadius,
+    marginBottom: spacing.l,
+    backgroundColor: colors.border,
   },
-  contentContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  resultsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: layout.borderRadius,
+    padding: spacing.l,
     width: '100%',
+    ...layout.shadow,
   },
-  infoText: {
-    fontSize: 16,
-    color: '#666',
-    marginVertical: 10,
-    textAlign: 'center',
-  },
-  errorText: {
-    fontSize: 18,
-    color: 'red',
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  resultsContainer: {
-    alignItems: 'stretch',
-    padding: 20,
-    backgroundColor: 'white',
-    borderRadius: 10,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.23,
-    shadowRadius: 2.62,
-    elevation: 4,
-  },
-  resultTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#007AFF',
-    textAlign: 'center',
+  groupContainer: {
+    marginBottom: spacing.l,
+    '&:last-child': {
+      marginBottom: 0,
+    },
   },
   resultCategory: {
-    fontSize: 18,
+    ...typography.label,
+    marginBottom: spacing.m,
+    paddingBottom: spacing.s,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.s,
+  },
+  resultLabel: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  resultValue: {
+    ...typography.body,
     fontWeight: '600',
-    color: '#333',
-    marginTop: 10,
+    color: colors.text,
   },
-  resultText: {
-    fontSize: 16,
-    color: '#555',
-    marginVertical: 4,
-    marginLeft: 10,
+  errorText: {
+    ...typography.body,
+    color: colors.error,
+    textAlign: 'center',
+    marginBottom: spacing.l,
   },
-  separator: {
-    height: 1,
+  finalButton: {
+    marginTop: spacing.xl,
     width: '100%',
-    backgroundColor: '#eee',
-    marginVertical: 10,
   },
 });

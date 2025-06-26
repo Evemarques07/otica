@@ -1,52 +1,90 @@
 import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Button,
-  Alert,
-  TouchableOpacity,
-} from 'react-native';
-
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Ionicons } from '@expo/vector-icons'; // NOVO: Importando ícones
+import { Ionicons } from '@expo/vector-icons';
+import {
+  colors,
+  layout,
+  typography,
+  components,
+  spacing,
+} from '../styles/theme';
+import CustomModal from '../components/CustomModal';
+import { ActivityIndicator } from 'react-native';
 
 export default function CameraScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
+  const [facing, setFacing] = useState('back');
+  const [modalInfo, setModalInfo] = useState({
+    isVisible: false,
+    title: '',
+    message: '',
+    buttons: [],
+  });
 
-  // NOVO: Estado para controlar a câmera (front ou back)
-  const [facing, setFacing] = useState('front');
+  const showModal = (title, message, buttons) => {
+    setModalInfo({ isVisible: true, title, message, buttons });
+  };
 
-  // NOVO: Função para alternar a câmera
-  function toggleCameraFacing() {
-    setFacing((current) => (current === 'front' ? 'back' : 'front'));
-  }
+  const hideModal = () => {
+    setModalInfo({ ...modalInfo, isVisible: false });
+  };
+
+  const toggleCameraFacing = () => {
+    setFacing((current) => (current === 'back' ? 'front' : 'back'));
+  };
 
   const takePicture = async () => {
     if (cameraRef.current) {
       try {
-        const data = await cameraRef.current.takePictureAsync({ quality: 1 });
-        console.log('LOG: Foto tirada com sucesso. URI:', data.uri);
-        navigation.navigate('Adjust', { imageUri: data.uri });
+        const data = await cameraRef.current.takePictureAsync({
+          quality: 1,
+          skipProcessing: true,
+        });
+        navigation.navigate('Adjust', {
+          imageUri: data.uri,
+          originalImageWidth: data.width,
+          originalImageHeight: data.height,
+        });
       } catch (error) {
-        console.error('LOG: Erro ao tirar a foto:', error);
-        Alert.alert('Erro', 'Não foi possível capturar a imagem.');
+        console.error('Erro ao tirar a foto:', error);
+        showModal(
+          'Erro ao Capturar',
+          'Não foi possível registrar a imagem. Por favor, tente novamente.',
+          [{ text: 'OK', onPress: hideModal, style: 'primary' }]
+        );
       }
     }
   };
 
   if (!permission) {
-    return <View />;
+    return (
+      <View style={[styles.container, layout.centered]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
-        <Text style={{ textAlign: 'center', marginBottom: 20 }}>
-          Precisamos da sua permissão para mostrar a câmera.
+      <View
+        style={[
+          layout.container,
+          layout.centered,
+          { paddingHorizontal: spacing.xl },
+        ]}
+      >
+        <Text style={styles.permissionTitle}>Acesso à Câmera</Text>
+        <Text style={styles.permissionText}>
+          Precisamos da sua permissão para usar a câmera e realizar a medição.
         </Text>
-        <Button onPress={requestPermission} title="Conceder Permissão" />
+        <TouchableOpacity
+          style={[components.buttonPrimary, { width: '100%' }]}
+          onPress={requestPermission}
+        >
+          <Text style={components.buttonPrimaryText}>Conceder Permissão</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -54,26 +92,37 @@ export default function CameraScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <CameraView
-        style={styles.camera}
-        facing={facing} // NOVO: Usando o estado dinâmico
+        style={StyleSheet.absoluteFill}
+        facing={facing}
         ref={cameraRef}
       />
 
-      {/* NOVO: Container para o botão de troca de câmera */}
       <View style={styles.topControlsContainer}>
         <TouchableOpacity
-          style={styles.toggleButton}
+          style={styles.iconButton}
           onPress={toggleCameraFacing}
         >
-          <Ionicons name="camera-reverse-outline" size={32} color="white" />
+          <Ionicons
+            name="camera-reverse-outline"
+            size={30}
+            color={colors.surface}
+          />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={takePicture}>
-          <View style={styles.innerButton} />
+      <View style={styles.bottomControlsContainer}>
+        <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
+          <View style={styles.captureButtonInner} />
         </TouchableOpacity>
       </View>
+
+      <CustomModal
+        isVisible={modalInfo.isVisible}
+        title={modalInfo.title}
+        message={modalInfo.message}
+        buttons={modalInfo.buttons}
+        onClose={hideModal}
+      />
     </View>
   );
 }
@@ -81,54 +130,54 @@ export default function CameraScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    position: 'relative',
+    backgroundColor: colors.black,
   },
-  camera: {
-    flex: 1,
+  permissionTitle: {
+    ...typography.h3,
+    textAlign: 'center',
+    marginBottom: spacing.m,
   },
-  permissionContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  permissionText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.l,
   },
-  // NOVO: Estilo para o container dos controles superiores
   topControlsContainer: {
     position: 'absolute',
     top: 60,
-    right: 20,
+    right: spacing.l,
     zIndex: 1,
   },
-  // NOVO: Estilo para o botão de troca
-  toggleButton: {
-    padding: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 50,
-  },
-  buttonContainer: {
+  bottomControlsContainer: {
     position: 'absolute',
     bottom: 50,
     left: 0,
     right: 0,
     alignItems: 'center',
-    zIndex: 1,
   },
-  button: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#fff',
+  iconButton: {
+    width: 50,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'gray',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 25,
   },
-  innerButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: 'black',
+  captureButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 6,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  captureButtonInner: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: colors.surface,
   },
 });
