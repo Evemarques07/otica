@@ -7,6 +7,7 @@ import {
   Text,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
 import {
   Gesture,
@@ -19,10 +20,8 @@ import Animated, {
   useAnimatedProps,
   useAnimatedStyle,
   withTiming,
-  runOnJS,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-
 import DraggablePoint from '../components/DraggablePoint';
 
 const AnimatedLine = Animated.createAnimatedComponent(Line);
@@ -35,54 +34,61 @@ export default function AdjustScreen({ route, navigation }) {
   const [mode, setMode] = useState('pan');
 
   const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+
+  // Usaremos estes para salvar o estado entre os gestos.
+  const savedScale = useSharedValue(1);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
   const centerImageForZoom = (newScale) => {
     'worklet';
-    const imageCenterX = screenWidth / 2;
-    const imageCenterY = screenHeight / 2;
-    const newTranslateX = imageCenterX - imageCenterX * newScale;
-    const newTranslateY = imageCenterY - imageCenterY * newScale;
-    translateX.value = withTiming(newTranslateX);
-    translateY.value = withTiming(newTranslateY);
-    scale.value = withTiming(newScale);
     savedScale.value = newScale;
+    scale.value = withTiming(newScale);
+
+    const newTranslateX = (screenWidth / 2) * (1 - newScale);
+    const newTranslateY = (screenHeight / 2) * (1 - newScale);
+
     savedTranslateX.value = newTranslateX;
     savedTranslateY.value = newTranslateY;
+    translateX.value = withTiming(newTranslateX);
+    translateY.value = withTiming(newTranslateY);
   };
 
   const handleZoomChange = (newZoom) => {
-    runOnJS(centerImageForZoom)(newZoom);
+    centerImageForZoom(newZoom);
   };
 
-  const pinchGesture = Gesture.Pinch()
-    .enabled(mode === 'pan')
-    .onUpdate((e) => {
-      const newScale = savedScale.value * e.scale;
-      scale.value = Math.max(1, Math.min(newScale, 5));
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-    });
-
+  // MUDANÇA FINAL: Lógica correta de gestos
   const panGesture = Gesture.Pan()
     .enabled(mode === 'pan')
     .minPointers(2)
     .maxPointers(2)
-    .onUpdate((e) => {
-      translateX.value = savedTranslateX.value + e.translationX;
-      translateY.value = savedTranslateY.value + e.translationY;
+    .onUpdate((event) => {
+      'worklet';
+      translateX.value = savedTranslateX.value + event.translationX;
+      translateY.value = savedTranslateY.value + event.translationY;
     })
     .onEnd(() => {
+      'worklet';
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
 
-  const composedGesture = Gesture.Simultaneous(panGesture, pinchGesture);
+  const pinchGesture = Gesture.Pinch()
+    .enabled(mode === 'pan')
+    .onUpdate((event) => {
+      'worklet';
+      const newScale = savedScale.value * event.scale;
+      scale.value = Math.max(0.5, Math.min(newScale, 5));
+    })
+    .onEnd(() => {
+      'worklet';
+      savedScale.value = scale.value;
+    });
+
+  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
 
   const animatedImageStyle = useAnimatedStyle(() => ({
     transform: [
@@ -97,26 +103,19 @@ export default function AdjustScreen({ route, navigation }) {
   const pointBX = useSharedValue(screenWidth / 2 + 100);
   const pointBY = useSharedValue(screenHeight / 2);
 
-  const animatedLineProps = useAnimatedProps(() => {
-    const pAx_transformed = pointAX.value * scale.value + translateX.value;
-    const pAy_transformed = pointAY.value * scale.value + translateY.value;
-    const pBx_transformed = pointBX.value * scale.value + translateX.value;
-    const pBy_transformed = pointBY.value * scale.value + translateY.value;
-
-    return {
-      x1: pAx_transformed,
-      y1: pAy_transformed,
-      x2: pBx_transformed,
-      y2: pBy_transformed,
-    };
-  });
+  const animatedLineProps = useAnimatedProps(() => ({
+    x1: pointAX.value * scale.value + translateX.value,
+    y1: pointAY.value * scale.value + translateY.value,
+    x2: pointBX.value * scale.value + translateX.value,
+    y2: pointBY.value * scale.value + translateY.value,
+  }));
 
   const resetZoomWorklet = () => {
     'worklet';
     scale.value = withTiming(1);
-    savedScale.value = 1;
     translateX.value = withTiming(0);
     translateY.value = withTiming(0);
+    savedScale.value = 1;
     savedTranslateX.value = 0;
     savedTranslateY.value = 0;
   };
@@ -134,8 +133,9 @@ export default function AdjustScreen({ route, navigation }) {
     const pixelsPerMm = distanceInPixels / 85.6;
 
     if (!isFinite(pixelsPerMm) || pixelsPerMm <= 0) {
-      alert(
-        'Calibração falhou. Tente posicionar os pontos novamente nos cantos do cartão.'
+      Alert.alert(
+        'Calibração falhou',
+        'Tente posicionar os pontos novamente nos cantos do cartão.'
       );
       return;
     }

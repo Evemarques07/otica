@@ -9,10 +9,19 @@ import {
 } from 'react-native';
 
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons'; // NOVO: Importando ícones
 
 export default function CameraScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
+
+  // NOVO: Estado para controlar a câmera (front ou back)
+  const [facing, setFacing] = useState('front');
+
+  // NOVO: Função para alternar a câmera
+  function toggleCameraFacing() {
+    setFacing((current) => (current === 'front' ? 'back' : 'front'));
+  }
 
   const takePicture = async () => {
     if (cameraRef.current) {
@@ -44,9 +53,22 @@ export default function CameraScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* A CameraView agora não tem filhos */}
-      <CameraView style={styles.camera} facing="front" ref={cameraRef} />
-      {/* O buttonContainer é um irmão da CameraView e está posicionado de forma absoluta */}
+      <CameraView
+        style={styles.camera}
+        facing={facing} // NOVO: Usando o estado dinâmico
+        ref={cameraRef}
+      />
+
+      {/* NOVO: Container para o botão de troca de câmera */}
+      <View style={styles.topControlsContainer}>
+        <TouchableOpacity
+          style={styles.toggleButton}
+          onPress={toggleCameraFacing}
+        >
+          <Ionicons name="camera-reverse-outline" size={32} color="white" />
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={takePicture}>
           <View style={styles.innerButton} />
@@ -59,8 +81,6 @@ export default function CameraScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // IMPORTANTE: Adicione 'position: relative' ou defina flex: 1 no container pai
-    // para que o posicionamento absoluto do buttonContainer funcione corretamente em relação a ele.
     position: 'relative',
   },
   camera: {
@@ -72,13 +92,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  // NOVO: Estilo para o container dos controles superiores
+  topControlsContainer: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 1,
+  },
+  // NOVO: Estilo para o botão de troca
+  toggleButton: {
+    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 50,
+  },
   buttonContainer: {
     position: 'absolute',
     bottom: 50,
     left: 0,
     right: 0,
     alignItems: 'center',
-    // IMPORTANTE: Adicione um zIndex para garantir que o botão esteja sempre acima da câmera
     zIndex: 1,
   },
   button: {

@@ -1,3 +1,4 @@
+// src/screens/ResultScreen.js
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -7,31 +8,22 @@ import {
   ActivityIndicator,
   Button,
 } from 'react-native';
-// import { processImage } from '../services/measurementService'; // Não é mais necessário aqui, pois as medidas vêm via rota
 
 export default function ResultScreen({ route, navigation }) {
-  // Recebe os parâmetros da tela de medição
   const { imageUri, measurements } = route.params;
-
-  // Como as medidas são passadas diretamente, simulamos um carregamento rápido
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simula um pequeno atraso para "processamento"
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000); // 1 segundo de atraso
+    const timer = setTimeout(() => setIsLoading(false), 500); // Carregamento mais rápido
     return () => clearTimeout(timer);
   }, []);
 
-  // Função para renderizar o conteúdo central com base no estado
   const renderContent = () => {
     if (isLoading) {
       return (
         <>
           <Text style={styles.infoText}>Calculando suas medidas...</Text>
           <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.infoText}>Aguarde um momento.</Text>
         </>
       );
     }
@@ -51,29 +43,43 @@ export default function ResultScreen({ route, navigation }) {
     return (
       <View style={styles.resultsContainer}>
         <Text style={styles.resultTitle}>Suas Medidas</Text>
+
+        <Text style={styles.resultCategory}>Distância Pupilar</Text>
         <Text style={styles.resultText}>
-          Distância Pupilar (DNP):{' '}
-          {measurements.pupillaryDistance
-            ? measurements.pupillaryDistance.toFixed(2)
-            : 'N/A'}{' '}
+          DNP Total: {measurements.pupillaryDistance?.toFixed(2) ?? 'N/A'} mm
+        </Text>
+        <Text style={styles.resultText}>
+          DNP Esquerda: {measurements.pdLeft?.toFixed(2) ?? 'N/A'} mm
+        </Text>
+        <Text style={styles.resultText}>
+          DNP Direita: {measurements.pdRight?.toFixed(2) ?? 'N/A'} mm
+        </Text>
+
+        <View style={styles.separator} />
+
+        <Text style={styles.resultCategory}>Altura do Centro Óptico</Text>
+        <Text style={styles.resultText}>
+          Altura Esquerda: {measurements.opticalCenterLeft?.toFixed(2) ?? 'N/A'}{' '}
           mm
         </Text>
         <Text style={styles.resultText}>
-          Ponte Nasal:{' '}
-          {measurements.nasalBridge
-            ? measurements.nasalBridge.toFixed(2)
-            : 'N/A'}{' '}
+          Altura Direita: {measurements.opticalCenterRight?.toFixed(2) ?? 'N/A'}{' '}
           mm
         </Text>
+
+        <View style={styles.separator} />
+
+        <Text style={styles.resultCategory}>Medidas da Armação</Text>
         <Text style={styles.resultText}>
-          Largura Total:{' '}
-          {measurements.frameWidth ? measurements.frameWidth.toFixed(2) : 'N/A'}{' '}
-          mm
+          Largura Total: {measurements.frameWidth?.toFixed(2) ?? 'N/A'} mm
         </Text>
-        <Button
-          title="Fazer Nova Medição"
-          onPress={() => navigation.navigate('Home')}
-        />
+
+        <View style={{ marginTop: 20 }}>
+          <Button
+            title="Fazer Nova Medição"
+            onPress={() => navigation.navigate('Home')}
+          />
+        </View>
       </View>
     );
   };
@@ -94,15 +100,10 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#f0f0f0',
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#333',
-  },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, color: '#333' },
   image: {
     width: '100%',
-    height: 300,
+    height: 250,
     resizeMode: 'contain',
     borderRadius: 10,
     marginBottom: 20,
@@ -129,29 +130,40 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   resultsContainer: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     padding: 20,
     backgroundColor: 'white',
     borderRadius: 10,
     width: '100%',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.23,
     shadowRadius: 2.62,
     elevation: 4,
   },
   resultTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 15,
     color: '#007AFF',
+    textAlign: 'center',
+  },
+  resultCategory: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 10,
   },
   resultText: {
-    fontSize: 18,
-    color: '#333',
-    marginVertical: 5,
+    fontSize: 16,
+    color: '#555',
+    marginVertical: 4,
+    marginLeft: 10,
+  },
+  separator: {
+    height: 1,
+    width: '100%',
+    backgroundColor: '#eee',
+    marginVertical: 10,
   },
 });
