@@ -43,7 +43,7 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Medidor de Óculos</Text>
+      <Text style={styles.title}>Medidor</Text>
       <View style={styles.buttonContainer}>
         <Button
           title="Tirar Foto"
